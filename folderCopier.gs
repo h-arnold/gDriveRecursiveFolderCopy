@@ -140,7 +140,7 @@ function resumeTimedOutOperationsDebug(e) {
           resume(payload);
           
         } else {
-          saveAndReschedule(payload, false);
+          scheduleResume();
           taskCompleted();
           releaseLock()
           console.log("Too many processes running. Rescheduling.");
