@@ -35,14 +35,13 @@ This script is a crude implementation of the 'copy folder' functionality Google 
  **Start the Copy Process**:
     - Run the `startCopy()` function from the script editor to initiate the copying process.
     - Wait patiently. Large folders could take hours.
-***Note***: The initial copy process may start slowly, especially if there are many files in the root folder as files are copied sequentially before recursively copying folders. If copying appears to have stalled briefly be patient as a resumption script should have a trigger to start in the next minute or so. The speed will soon pick up when it starts recursively working its way through the folder tree.
+    - ***Note***: The initial copy process may start slowly, especially if there are many files in the root folder as files are copied sequentially before recursively copying folders. If copying appears to have stalled briefly be patient as a resumption script should have a trigger to start in the next minute or so. The speed will soon pick up when it starts recursively working its way through the folder tree.
 
  **Ending the copy process prematurely**:
     - Run the `stopScript` function to end the process. 
        - This clears all exisiting resumption triggers and sets the contineRunning script property to false, which means any future instances will end immediately.
    - Wait 5-10 minutes for all instances to stop running.
-     
-***IMPORTANT***: Stopping the `startCopy()` function will not be sufficient to stop the copy process on its own because this script creates multiple child instances which create resumption triggers. If you stop the copy process deep into a copy, you may find it impossible to manually stop all child processes and triggers from being created.
+   - ***IMPORTANT***: Stopping the `startCopy()` function will not be sufficient to stop the copy process on its own because this script creates multiple child instances which create resumption triggers. If you stop the copy process deep into a copy, you may find it impossible to manually stop all child processes and triggers from being created.
 
 
 
