@@ -1,108 +1,68 @@
-# Google Drive Recursive File and Folder Copy Script
+# Google Drive Folder Copier
 
-This Google Apps Script project is designed to recursively copy files and folders from a source Google Drive folder to a destination folder. The script uses a master-worker model to handle large folder structures efficiently, distributing the copying tasks across multiple parallel operations.
-
-Crucially, if you are trying to copy folders from one Google Workspace Org to another, this will allow you to automate the process. The copied files will be owned by the person running the script.
+This script is a crude implementation of the 'copy folder' functionality Google Drive should have, but doesn't. Copy operations via Google App Script are painfully slow so this script copies files and folders in parallel (up to 30 operations at once) to make the process a little less slow. Google App Script Triggers are created whenever an instance of the script is in danger of timing out so that it can be resumed.
 
 ## Features
 
-- **Recursive Copying**: Copies all files and subfolders from the source folder to the destination folder.
-- **Parallel Processing**: Utilises a master-worker architecture to distribute tasks, enabling faster copying for large folder structures.
-- **Continuation Tokens**: Handles long-running operations by saving state using continuation tokens, allowing the script to resume operations if it times out.
-- **Security**: Includes secret key validation to ensure authorised access to the worker script.
-- **Dynamic Chunking**: Processes files in manageable chunks to balance load and improve performance.
-- **Retry Mechanism**: Implements exponential backoff for retries when tasks cannot be dispatched immediately.
+- **Transfer Ownership**: The copied folders and files will belong to the user who runs the script, making it ideal for transferring data between organisations.
+- **Parallel Execution**: Capable of executing up to 30 copy operations in parallel.
+- **Resumable Operations**: Automatically handles timeouts and can resume operations from where they left off.
 
-## Setup
+## Getting Started
 
 ### Prerequisites
 
-- Google Account with access to Google Drive and Google Apps Script.
-- Basic knowledge of Google Apps Script and Google Drive API.
+- A Google account with access to both the source and destination folders on Google Drive.
+- Google Apps Script access (typically available with Google Workspace accounts).
 
 ### Installation
 
-1. **Create the Master Script**
-   1. Open [Google Apps Script](https://script.google.com/).
-   2. Create a new project.
-   3. Copy and paste the following code from the 'masterScripts' folder into this project.
-   4. Replace placeholder values for `fromFolderId` and `toFolderId` with your source and destination folder IDs.
-   5. Save the project.
+1. **Clone the Repository**:
+    ```sh
+    git clone [https://github.com/h-arnold/gDriveRecursiveFolderCopy.git]
+    ```
+2. **Set Up the Script**:
+    - Open [Google Apps Script](https://script.google.com/) and create a new project.
+    - Copy the contents of the script file from the repository into the new project.
 
-2. **Create the Worker Script**
-   1. In the same project, create a new script file.
-   2. Copy and paste all the files from the 'workerScripts' folder into your project.
-   3. Save the project.
-
-### Configuration
-
-1. **Set Script Properties**
-   1. Open the script project.
-   2. Navigate to `File > Project Properties > Script Properties`.
-   3. Add the following properties:
-      - `fromFolderId`: ID of the source folder.
-      - `toFolderId`: ID of the destination folder.
-      - `workerUrl`: URL of the deployed worker web app.
-
-2. **Deploy the Worker Web App**
-   1. Open the Apps Script project.
-   2. Navigate to `Deploy > Manage Deployments`.
-   3. Click `New Deployment`.
-   4. Select `Web app`.
-   5. Set the access to `Anyone, even anonymous`.
-   6. Deploy the web app and copy the URL.
-   7. Set the `workerUrl` script property to this URL.
-
+3. **Configure the Script**:
+    - Set the `fromFolderId` and `toFolderId` variables with the respective folder IDs in the `startCopy()` function.
+    - Deploy the script as a web app (select "Deploy" > "New deployment" > "Web app" and set access to 'anyone' and excute by 'me {your email address}'. Copy the WebApp URL
+    - Go to options and create a script property called workerUrl.
+    - Paste the Web App URL into the 'value' box of the workerUrl script property.
 ### Usage
 
-#### First Run
+ **Start the Copy Process**:
+    - Run the `startCopy()` function from the script editor to initiate the copying process.
+    - Wait patiently. Large folders could take hours.
 
-1. **Create a secret key**
-  This generates a random 256 character string that you will use as your secret key. This prevents unauthorised users from running your Web App. I also recommend stopping the deployment once the bulk copy is complete.
-  1. Run the generateSecretKey() function.
-  2. Navgiate to the Script Properties.
-  3. Copy the 'secretKey' script property.
-  4. Create a 'secretKey' script property for the worker function and paste it in there.
+ **Ending the copy process prematurely**:
+    - Run the `stopScript` function to end the process. 
+       - This clears all exisiting resumption triggers and sets the contineRunning script property to false, which means any future instances will end immediately.
+   - Wait 5-10 minutes for all instances to stop running.
+     
+    *IMPORTANT*: Stopping the `startCopy()` function will not be sufficient to stop the copy process on its own because this script creates multiple child instances which create resumption triggers. If you stop the copy process deep into a copy, you may find it impossible to manually stop all child processes and triggers from being created.
 
-1. **Run the Master Script**
-   1. Open the Apps Script project.
-   2. Select the `startCopy()` function.
-   3. Click the Run button to start the copying process.
-   
-### Explanation of Functions
 
-- **Master Script Functions**:
-  - `startCopy()`: Initializes the script, sets up script properties, and starts the copy process.
-  - `initiateCopy()`: Manages the dispatching of copy tasks, handles retries, and processes folders.
-  - `calculateChunkSize(fromFolder)`: Dynamically calculates chunk size for file processing.
-  - `callWorkerWebApp(payload)`: Sends a task to the worker web app via HTTP POST.
-  - `canDispatchTask()`: Checks if a new task can be dispatched based on active task count.
-  - `taskCompleted()`: Updates the active task count when a task is completed.
-  - `generateSecretKey()`: Generates a random secret key for security.
-  - `validateSecretKey(receivedKey)`: Validates the received secret key against the stored key.
-  - `clearAllTriggers()`: Clears all existing triggers.
 
-- **Worker Script Functions**:
-  - `doPost(e)`: Main function to handle POST requests from the master script, processes files and folders, and handles continuation tokens.
-  - `processFileBatch(fileBatch, toFolder, startTime, maxExecutionTime, payload)`: Processes a batch of files.
-  - `processRemainingFilesAndFolders(fromFolder, toFolder, startTime, maxExecutionTime, payload)`: Processes remaining files and folders recursively.
-  - `checkForTimeout(startTime, maxExecutionTime, payload)`: Checks if the script is near timeout and saves state if necessary.
-  - `isNearTimeout(startTime, maxExecutionTime)`: Determines if the script is near the execution time limit.
-  - `generateContinuationToken()`: Generates a continuation token.
-  - `saveAndRescheduleContinuationToken(payload, continuationToken)`: Saves and reschedules continuation tokens.
-  - `saveContinuationToken(payload, continuationToken)`: Saves the continuation token in script properties.
-  - `scheduleResume()`: Schedules the resume function.
-  - `resumeTimedOutOperations()`: Resumes operations from stored continuation tokens.
-  - `resumeFromContinuationToken(payload, continuationToken)`: Resumes from a specific continuation token.
-  - `doesFileExist(folder, fileName)`: Checks if a file exists in a folder.
-  - `findExistingFolder(folder, folderName)`: Finds an existing folder by name.
-  - `callWorkerWebApp(payload)`: Sends a task to the worker web app.
-  - `validateSecretKey(receivedKey)`: Validates the secret key.
+### Debugging
 
-### Contributing
+The script includes several debugging functions:
+- **storeParams(params)**: Stores parameters for debugging.
+- **debugScript()**: Runs the script with stored debug parameters.
+- **storeErrorParams(params)**: Stores error parameters for later debugging.
+- **debugLastError()**: Runs the script with stored error parameters.
 
-Contributions are welcome! Please create an issue to discuss any changes or improvements before submitting a pull request.
+### Notes
 
-### License
+- **Execution Time**: The script is designed to handle Google's execution time limits by scheduling and resuming tasks as needed.
+- **Ownership Transfer**: All copied files and folders will be owned by the user who runs the script, ensuring proper transfer of data between organisations.
+- **It's still slow**: Copy files and folders via Google App Script is painfully slow. This script just makes it slightly less painful.
 
-This project is licensed under the MIT License.
+## Contributing
+
+Feel free to submit issues and pull requests to improve the script and add new features.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
