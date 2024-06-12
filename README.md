@@ -19,7 +19,7 @@ This script is a crude implementation of the 'copy folder' functionality Google 
 
 1. **Clone the Repository**:
     ```sh
-    git clone [https://github.com/h-arnold/gDriveRecursiveFolderCopy.git]
+    git clone https://github.com/h-arnold/gDriveRecursiveFolderCopy.git
     ```
 2. **Set Up the Script**:
     - Open [Google Apps Script](https://script.google.com/) and create a new project.
