@@ -265,7 +265,7 @@ function processFolderIterator(folders, toFolder) {
       continuationPayload = {
               "continuationToken": continuationToken, 
               "type": "folder",
-              "toFolderId" : newFolder.getId()
+              "toFolderId" : toFolder.getId()
               }  
 
       saveAndReschedule(continuationPayload);
