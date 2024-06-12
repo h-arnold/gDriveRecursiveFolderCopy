@@ -35,6 +35,7 @@ This script is a crude implementation of the 'copy folder' functionality Google 
  **Start the Copy Process**:
     - Run the `startCopy()` function from the script editor to initiate the copying process.
     - Wait patiently. Large folders could take hours.
+*Note*: The initial copy process may start slowly, especially if there are many files in the root folder as files are copied sequentially before recursively copying folders. If copying appears to have stalled briefly be patient as a resumption script should have a trigger to start in the next minute or so. The speed will soon pick up when it starts recursively working its way through the folder tree.
 
  **Ending the copy process prematurely**:
     - Run the `stopScript` function to end the process. 
