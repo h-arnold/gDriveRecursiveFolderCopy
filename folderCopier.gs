@@ -3,16 +3,17 @@
 
 var SCHEDULED = false
 const START_TIME = new Date().getTime();
-const MAX_EXECUTION_TIME = 2.5 * 60 * 1000
+const MAX_EXECUTION_TIME = 3 * 60 * 1000 //3 minutes. Setting the value higher than this may mean that the script times out before it can be suspended.
 const SECRET_KEY = getSecretKey()
 
 //Run this function to get the process started.
+//=============================================
 
 function startCopy() {
   //Gets the folders to copy from and copy to
 
-  const fromFolderId = "THE FOLDER ID OF THE GOOGLE DRIVE FOLDER YOU'RE COPYING FROM"
-  const toFolderId = "THE FOLDER ID OF THE GOOGLE DRIVE FOLDER YOU ARE COPYING TO"
+  const fromFolderId = "YOUR FROM FOLDER ID HERE"
+  const toFolderId = "YOUR TO FOLDER ID HERE"
 
   const fromFolder = DriveApp.getFolderById(fromFolderId);
   const toFolder = DriveApp.getFolderById(toFolderId);
@@ -41,6 +42,7 @@ function startCopy() {
   
 }
 
+
 //WebApp Code. doPost handles the requests send via https.
 //=========================================================
 function doPost(e) {
@@ -65,7 +67,7 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'unauthorized' })).setMimeType(ContentService.MimeType.JSON);
   }
     
-  // Checks if a continuation token exists and finds the file or folder GDrive iterator if so
+  // Checks if a continuation token exists and adds it to a constant if so.
   if (payload.continuationToken) {
     fileOrFolderIterator = getFileOrFolderIterator(payload)
   }
@@ -81,10 +83,13 @@ function doPost(e) {
   } catch (err) {
       console.error(err.message);
       console.error(err.stack);
-      storeErrorParams(e);
+      storeErrorParams(e); // The parameters that led to the error being thrown are stored here. You can run the code using these parameters using the function debugLastError()
       throw new Error (err.message)
   }
 }
+
+//Debugging functions. Useful if something goes wrong and you want to trace through the code.
+//==========================================================================================
 
 function storeParams(params) {
   const userProperties = PropertiesService.getUserProperties();
@@ -97,9 +102,6 @@ function debugScript() {
   params = JSON.parse(params);
   doPost(params)
 }
-
-//Debugging functions. Useful if something goes wrong and you want to trace through the code.
-//==========================================================================================
 
 function storeErrorParams(params) {
   const userProperties = PropertiesService.getUserProperties();
@@ -126,7 +128,7 @@ function resumeTimedOutOperationsDebug(e) {
       return;
     }
 
-        const payload = {"Get your continuation payload JSON string from the execution log.};
+        const payload = {"REPLACE WITH THE PAYLOAD STRING THAT YOU WANT TO DEBUG FROM THE EXECUTION LOG"}
 
         if (canDispatchTask()) {
           // Delete property before continuing to ensure that other scripts don't work on the same continuation token
@@ -140,7 +142,7 @@ function resumeTimedOutOperationsDebug(e) {
           resume(payload);
           
         } else {
-          scheduleResume();
+          saveAndReschedule(payload, false);
           taskCompleted();
           releaseLock()
           console.log("Too many processes running. Rescheduling.");
@@ -200,13 +202,25 @@ function processFileIterator(files, toFolder) {
     let file = files.next();
     let filename = file.getName() //Assign filename to a variable to reduce API calls.
     if (!doesFileExist(toFolder, filename)) {
-      const newFile = file.makeCopy(toFolder);
-      newFile.setName(filename);
-      console.log(filename + " copied successfully");
+      try {
+        const newFile = file.makeCopy(toFolder);
+        newFile.setName(filename);
+        console.log(filename + " copied successfully");
+      } catch (e) {
+        //TODO: Create and save a text file with all files and folders that have failed to copy.
+        
+        console.error("Error copying " + filename);
+        console.error(e.message)
+        console.error(e.stack)
+      }
     } else {
-      console.log(filename + " exists. Skipping.");      }
+        console.log(filename + " exists. Skipping.");      
+    }
 
-    if (isNearTimeout()) {
+
+    //If we're getting close to timeout time and there are files left to iterate through, reschedule.
+
+    if (isNearTimeout() && files.hasNext()) {
       let continuationToken = files.getContinuationToken();
       let continuationPayload = {
               "continuationToken": continuationToken, 
@@ -218,12 +232,14 @@ function processFileIterator(files, toFolder) {
       return false;
     }
   }
-   return true;
+  return true;
 }
 
 function processFolderIterator(folders, toFolder) {
 
   while (folders.hasNext()) {
+    console.log(folders.hasNext())
+
     //Declare continuation paylod variable for use later.
     let continuationPayload;
     let continuationToken;
@@ -239,36 +255,43 @@ function processFolderIterator(folders, toFolder) {
       console.log(folderName + " exists. Skipping");
     }
 
+    let newPayload = {
+      fromFolderId: folder.getId(),
+      toFolderId: newFolder.getId(),
+      secretKey: SECRET_KEY
+    };     
+
     if (isNearTimeout()) {
-      continuationToken = folders.getContinuationToken();
-      continuationPayload = {
+
+      //Reschedules the new payload first, as if there are other folders in the iterator, the current one gets missed.
+      saveAndReschedule(newPayload);
+
+      //If there are folders to iterate on, create a continuation token to contniue with the next folder in the iterator.
+
+      if (folders.hasNext()) {
+        console.log(folders.hasNext())
+        continuationToken = folders.getContinuationToken();
+        continuationPayload = {
               "continuationToken": continuationToken, 
               "type": "folder",
               "toFolderId" : toFolder.getId()
               } 
       saveAndReschedule(continuationPayload);
+      
+      // If there aren't any folders remaining to iterate on, schedule the continuation based on the new payload.
+      } else {
+        saveAndReschedule(newPayload)
+      }
       return false;
     }
-
-    let newPayload = {
-      fromFolderId: folder.getId(),
-      toFolderId: newFolder.getId(),
-      secretKey: SECRET_KEY
-    };
 
     if (canDispatchTask()) {
       console.log("Beginning recursion")
       callWorkerWebApp(newPayload);
       taskCompleted();
+      console.log("Successfully called a new worker instance.")
     } else {
-      continuationToken = folders.getContinuationToken();
-      continuationPayload = {
-              "continuationToken": continuationToken, 
-              "type": "folder",
-              "toFolderId" : toFolder.getId()
-              }  
-
-      saveAndReschedule(continuationPayload);
+      saveAndReschedule(newPayload);
       return false;
     }
   }
@@ -435,7 +458,6 @@ function stopScript() {
 
   clearAllTriggers();
   clearResumeProperties();
-
 }
 
 //Timeout Handling functions
@@ -456,8 +478,8 @@ function scheduleResume() {
   let retries = Number(scriptProperties.getProperty('retries')) || 0;
   
   //Limit retries figure to 7 so that the exponential backoff doesn't become too ridiculous.
-  if (retries < 7) {
-    retries += 0.5;
+  if (retries < 8) {
+    retries += 1;
   } 
    
   scriptProperties.setProperty('retries', String(retries));
@@ -485,8 +507,11 @@ function saveAndReschedule(payload) {
   //Creates a key from the continuation token. This is stored in ScriptProperties and when the function is triggered from schedule, it will iterate through each continuation key until there are none left.
   payload = JSON.stringify(payload)
   const resumeKey = 'resume_' + payload;
-  scriptProperties.setProperty(resumeKey, payload);
 
+  if (!doesResumeKeyExist(resumeKey)) {
+      scriptProperties.setProperty(resumeKey, payload);
+      console.log("No matching resume key. Creating a new one")
+  } 
   //Checks if this instance of the script has already been scheduled and if there are fewer than 20 scheduled triggers already.
   if (!SCHEDULED) {
     scheduleResume()
@@ -494,11 +519,25 @@ function saveAndReschedule(payload) {
   return;
 }
 
+function doesResumeKeyExist(resumeKey) {
+  const scriptProperties = PropertiesService.getScriptProperties() 
+  const property = scriptProperties.getProperty(resumeKey);
 
-//Resuming from triggers functions
-//================================
+  //If the property exists, returns true
+  if (property) {
+    return true
+  } else {
+    return false
+  }
+}
+
+// Resumption from schedule functions
+//===================================
 
 function resumeTimedOutOperations(e) {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const properties = scriptProperties.getProperties();
+    
   try {
     // Delete the trigger that called the function
     if (e) {
@@ -510,10 +549,15 @@ function resumeTimedOutOperations(e) {
       return;
     }
 
-    const scriptProperties = PropertiesService.getScriptProperties();
-    const properties = scriptProperties.getProperties();
 
     for (let key in properties) {
+      //Ends loop if near timeout. A true value for scheduled means that a resume has already been scheduled somewhere during the running of the function.
+
+      if (SCHEDULED) {
+        console.log("Getting close to timeout. Ending function here.")
+        return;
+      }      
+      
       // Try to acquire the lock
       let lock = getLock();
 
@@ -524,6 +568,7 @@ function resumeTimedOutOperations(e) {
         return;
       }
 
+
       if (key.startsWith('resume_')) {
         console.log("Current continuation token being worked on is: " + properties[key]);
         const payload = JSON.parse(properties[key]);
@@ -532,20 +577,29 @@ function resumeTimedOutOperations(e) {
           // Delete property before continuing to ensure that other scripts don't work on the same continuation token
           scriptProperties.deleteProperty(key);
 
-          //Once we know that the script property containing the continuation token that is currently being iterated upon, we can safely release the lock to allow for concurrency.          
-          taskCompleted();
+          //Reduce the retries value as processes are now running and can be scheduled to start sooner
+          let retries = Number(scriptProperties.getProperty('retries')) || 0;
+          if (retries > 0) {
+            retries --
+            scriptProperties.setProperty('retries', retries);
+          }
+
+
+          //Release the lock so that the copy process can continue in parallel.
           releaseLock(lock)
-          
+
           //Resume copy process
           resume(payload);
-          
+
         } else {
-          taskCompleted();
-          releaseLock()
+          scheduleResume();
+          releaseLock(lock)
           console.log("Too many processes running. Rescheduling.");
         }
-
-
+        
+        taskCompleted()
+        console.log("Finished processing a continuation entry.")
+        
       }
     }
 
@@ -574,8 +628,10 @@ function resume(payload) {
   processFilesAndFolders(fromFolder, DriveApp.getFolderById(toFolderId), fileOrFolderIterator);
 }
 
+
+
 //Trigger management functions
-//============================
+//================================
 
 function identifyAndDeleteTrigger(event) {
   // Get the trigger ID
@@ -631,6 +687,7 @@ function checkTriggersCount() {
   }
 }
 
+
 //Concurrency management functions
 //=================================
 
@@ -681,5 +738,3 @@ function resetActiveTasks() {
   properties.setProperty('activeTasks', 0);
 
 }
-
-
