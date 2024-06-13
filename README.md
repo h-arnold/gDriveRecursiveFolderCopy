@@ -1,6 +1,8 @@
-# Google Drive Folder Copier
+# Google Drive Parallel Recursive Folder Copier
 
-This script is a crude implementation of the 'copy folder' functionality Google Drive should have, but doesn't. Copy operations via Google App Script are painfully slow so this script copies files and folders in parallel (up to 30 operations at once) to make the process a little less slow. Google App Script Triggers are created whenever an instance of the script is in danger of timing out so that it can be resumed.
+Google will not allow you to copy folders via the WebUI and it will not allow you to transfer ownership of folders to people outside of your organisation. This can be a problem if you want to migrate from one Workspace org to another. This script addresses this problem by recursively copying the source folder to the destination folder of the users' choosing. The running the script needs to have at least view access of the source folder and edit access of the destination folder. 
+
+The other implementations of this solution copy files sequentially and are subject to the Google App Script execution limits. Because the app script copy operation is so slow (~0.5sec/file) this limits size and complexity of folders you can copy significantly. To overcome this, I made my own version which  copies files and folders in parallel (up to 30 simulatenous workers) and automatically schedules the resumption of copy operations before the 6 minute execution limit is hit. This means that you can copy large and complex folder strucutres relatively quickly (it's still painfully slow), subject to the maximum 6 hours of cumulative exection time time per day limit.
 
 ## Features
 
